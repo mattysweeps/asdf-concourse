@@ -1,4 +1,5 @@
 # asdf-fly
+[![Build Status](https://travis-ci.org/mattysweeps/asdf-fly.svg)](https://travis-ci.org/mattysweeps/asdf-fly)
 
 [fly](https://github.com/concourse/concourse) plugin for the [asdf](https://github.com/asdf-vm/asdf) version manager.
 

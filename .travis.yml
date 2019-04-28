@@ -1,6 +1,6 @@
 language: c
 script:
-  - asdf plugin-test cf $TRAVIS_BUILD_DIR 'fly --version'
+  - asdf plugin-test concourse $TRAVIS_BUILD_DIR 'fly --version'
 
 before_script:
   - git clone https://github.com/asdf-vm/asdf.git

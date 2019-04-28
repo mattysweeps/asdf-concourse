@@ -17,17 +17,17 @@
 set -e
 set -o pipefail
 
-tool=fly
 repo="https://github.com/concourse/concourse"
 
 install() {
   local install_type=$1
   local version=$2
   local install_path=$3
+  local tool=$4
   local platform="$(uname | tr '[:upper:]' '[:lower:]')-amd64"
   local bin_install_path="$install_path/bin"
   local binary_path="$bin_install_path/${tool}"
-  local download_url=$(get_download_url $version $platform)
+  local download_url=$(get_download_url $version $platform $tool)
 
   if [ "$TMPDIR" = "" ]; then
     local tmp_download_dir=$(mktemp -d -t ${tool}_XXXXXX)
@@ -35,7 +35,7 @@ install() {
     local tmp_download_dir=$TMPDIR
   fi
 
-  local download_path="$tmp_download_dir/fly.tgz"
+  local download_path="$tmp_download_dir/${tool}.tgz"
 
   echo "Downloading ${tool} from ${download_url} to ${download_path}"
   curl -Lo $download_path $download_url
@@ -48,22 +48,39 @@ install() {
 
   echo "Copying binary"
   tar -zxf ${download_path} --directory $tmp_download_dir
-  cp ${tmp_download_dir}/${tool} ${bin_install_path}
+  $(get_copy_command $tool ${tmp_download_dir}/${tool} ${bin_install_path})
   chmod +x ${binary_path}
+}
+
+get_copy_command() {
+    local tool="$1"
+    local from="$2"
+    local to="$3"
+    case $tool in
+      fly)
+        echo "cp $from $to"
+        ;;
+      concourse)
+        echo "cp $from/bin/* $to"
+        ;;
+      *)
+        echo Unsupported tool $tool 1>&2
+        exit 1
+    esac
 }
 
 get_download_url() {
   local version="$1"
   local platform="$2"
-
+  local tool="$3"
   local asset=""
 
   case $platform in
     linux-amd64)
-      asset="fly-${version}-${platform}.tgz"
+      asset="${tool}-${version}-${platform}.tgz"
       ;;
     darwin-amd64)
-      asset="fly-${version}-${platform}.tgz"
+      asset="${tool}-${version}-${platform}.tgz"
       ;;
     *)
       echo Unsupported platform ${platform} 1>&2
@@ -73,4 +90,5 @@ get_download_url() {
   echo "${repo}/releases/download/v${version}/${asset}"
 }
 
-install $ASDF_INSTALL_TYPE $ASDF_INSTALL_VERSION $ASDF_INSTALL_PATH
+install $ASDF_INSTALL_TYPE $ASDF_INSTALL_VERSION $ASDF_INSTALL_PATH fly
+install $ASDF_INSTALL_TYPE $ASDF_INSTALL_VERSION $ASDF_INSTALL_PATH concourse

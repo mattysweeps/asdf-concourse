@@ -9,7 +9,7 @@ After installing [asdf](https://github.com/asdf-vm/asdf),
 you can add this plugin like this:
 
 ```bash
-asdf plugin-add https://github.com/mattysweeps/asdf-concourse
+asdf plugin add concourse https://github.com/mattysweeps/asdf-concourse
 asdf install concourse 5.0.1
 concourse
 fly

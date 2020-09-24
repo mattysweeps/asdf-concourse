@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -e
 set -o pipefail
 
 repo="https://github.com/concourse/concourse"
@@ -27,7 +26,14 @@ install() {
   local platform="$(uname | tr '[:upper:]' '[:lower:]')-amd64"
   local bin_install_path="$install_path/bin"
   local binary_path="$bin_install_path/${tool}"
-  local download_url=$(get_download_url $version $platform $tool)
+  
+  # Check if version is older than 5
+  vercomp $version 5
+  local version_older_than_5="$?"
+  echo "Version older than 5 : -${version_older_than_5}-"
+
+  local download_url=$(get_download_url $version $platform $tool $version_older_than_5 ) || exit $? 
+  echo "Download URL : ${download_url} "
 
   if [ "$TMPDIR" = "" ]; then
     local tmp_download_dir=$(mktemp -d -t ${tool}_XXXXXX)
@@ -47,8 +53,15 @@ install() {
   rm -f $binary_path 2>/dev/null || true
 
   echo "Copying binary"
-  tar -zxf ${download_path} --directory $tmp_download_dir
-  $(get_copy_command $tool ${tmp_download_dir}/${tool} ${bin_install_path})
+  if [ "$version_older_than_5" == "2" ]; then
+      echo "Version is older than 5"
+      echo "No un-tar needed"
+      mv ${download_path} ${tmp_download_dir}/${tool}
+  else
+    tar -zxf ${download_path} --directory $tmp_download_dir
+  fi 
+
+  $(get_copy_command $tool ${tmp_download_dir}/${tool} ${bin_install_path} $version_older_than_5 )
   chmod +x ${binary_path}
 }
 
@@ -56,12 +69,18 @@ get_copy_command() {
     local tool="$1"
     local from="$2"
     local to="$3"
+    local version_older_than_5="$4"
+
     case $tool in
       fly)
         echo "cp $from $to"
         ;;
       concourse)
-        echo "cp $from/bin/* $to"
+        if [ "$version_older_than_5" == "2" ]; then
+            echo "cp $from $to"
+        else 
+            echo "cp $from/bin/* $to"
+        fi
         ;;
       *)
         echo Unsupported tool $tool 1>&2
@@ -69,7 +88,34 @@ get_copy_command() {
     esac
 }
 
-get_download_url() {
+get_download_url(){
+  local version="$1"
+  local platform="$2"
+  local tool="$3"
+  local version_older_than_5="$4"
+  local download_url=""
+
+  # echo "get_download_url called with -- $* --"
+
+  case $version_older_than_5 in
+        "0" | "1") # Version is '>=' 5
+            # echo "Version is >= v5"
+            download_url=$(get_download_url_v5_newer $version $platform $tool)
+            ;;
+        "2") # Version is '<' 5
+            # echo "Version is < v5"
+            download_url=$(get_download_url_older_than_v5 $platform $tool)
+            ;;
+	*) 
+      	    echo "Failed to compare semver ${version} with 5"
+      	    exit 1
+    esac
+    
+    echo $download_url
+}
+
+get_download_url_v5_newer() {
+    # echo "get_download_url_v5_newer called"
   local version="$1"
   local platform="$2"
   local tool="$3"
@@ -88,6 +134,63 @@ get_download_url() {
     esac
 
   echo "${repo}/releases/download/v${version}/${asset}"
+}
+
+get_download_url_older_than_v5() {
+  # echo "get_download_url_older_than_v5 called with --$* --"
+  local platform="${1/-/_}" #Replace - with _
+  local tool="$2"
+  local asset=""
+
+  case $platform in
+    linux_amd64)
+      asset="${tool}_${platform}"
+      ;;
+    darwin_amd64)
+      asset="${tool}_${platform}"
+      ;;
+    *)
+      echo Unsupported platform ${platform} 1>&2
+      exit 1
+    esac
+
+  echo "${repo}/releases/download/v${version}/${asset}"
+}
+
+# From https://stackoverflow.com/questions/4023830/how-to-compare-two-strings-in-dot-separated-version-format-in-bash
+vercomp () {
+    # echo "Comparing $*"
+    if [[ $1 == $2 ]]
+    then
+        return 0
+    fi
+
+    local IFS=.
+    local i ver1=($1) ver2=($2)
+    # fill empty fields in ver1 with zeros
+    for ((i=${#ver1[@]}; i<${#ver2[@]}; i++))
+    do
+        ver1[i]=0
+    done
+
+
+    for ((i=0; i<${#ver1[@]}; i++))
+    do
+        if [[ -z ${ver2[i]} ]]
+        then
+            # fill empty fields in ver2 with zeros
+            ver2[i]=0
+        fi
+        if ((10#${ver1[i]} > 10#${ver2[i]}))
+        then
+            return 1
+        fi
+        if ((10#${ver1[i]} < 10#${ver2[i]}))
+        then
+            return 2
+        fi
+    done
+    return 0
 }
 
 install $ASDF_INSTALL_TYPE $ASDF_INSTALL_VERSION $ASDF_INSTALL_PATH fly
